@@ -2,13 +2,14 @@
 package guia4;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.util.Arrays;
 import javax.swing.Timer;
 import javax.swing.table.DefaultTableModel;
 /**
  *
  * @author kevin
  */
-public class GUI extends javax.swing.JFrame {
+public class GUI extends javax.swing.JFrame implements Runnable {
 DefaultTableModel modelo = new DefaultTableModel();
 String orden;
 
@@ -34,11 +35,16 @@ jSlider1.addChangeListener(new javax.swing.event.ChangeListener() {
 
     }
         int[] pos = new int[10];
-        Timer[] t = new Timer[10];
+       Thread[] hilos = new Thread[10]; 
         double[] tiemposLlegada = new double[10];
         boolean[] llego = new boolean[10];
         double inicioCa;
         int carrosFin = 0;
+        String[] colores = {"verde","azul","rojo","cafe","amarillo","celeste","morado","naranja","rosado","gris"};
+/* Si el slider cambia el valor a 10, algunos hilos podrían seguir viendo el valor viejo 30
+        porque no sincronizan inmediatamente con la memoria principal.*/
+        volatile int velocidadGlobal = 30;
+/*memoria principal*/
 
 
     /**
@@ -186,110 +192,122 @@ jSlider1.addChangeListener(new javax.swing.event.ChangeListener() {
 inicioCa = System.currentTimeMillis();
 carrosFin = 0;
 
-for (int h = 0; h < 10; h++) {
+for (int i = 0; i < 10; i++) {
     
-   
+   pos[i] = 0;
+            llego[i] = false;
+            hilos[i] = new Thread(this); // todos usan el mismo run()
+            hilos[i].setName("Carro-" + i); 
+            hilos[i].start(); 
+        }
+      
+    }//GEN-LAST:event_jButton1ActionPerformed
 
-    int delay = (int)(Math.random()*(50)); // entre 50 
-    int i = h;
+    public void run() {
+        Thread actual = Thread.currentThread(); // saber qué hilo soy
 
-    t[h] = new Timer(delay, new ActionListener() {
-    public void actionPerformed(ActionEvent e) {
-        if (!llego[i]) {
-            pos[i]++;
-            panel1.X(i, pos[i]); //metodo del panel
-            panel1.repaint();
+        // Buscar qué índice corresponde a este hilo
+        int i = -1;
+        for (int j = 0; j < hilos.length; j++) {
+            if (actual == hilos[j]) {
+                i = j;
+                break;
+            }
+        }
 
-            if (pos[i] >= 765) {
-                llego[i] = true;
-                t[i].stop();
-                tiemposLlegada[i] = System.currentTimeMillis() - inicioCa;
+        //encontrar el carro 
+        if (i != -1) {
+            int velocidad = (int)(Math.random()*50 + 10); // velocidad aleatoria
+
+            while (pos[i] < 765) { // mientras no llegue a la meta
+                pos[i]++;
+                panel1.X(i, pos[i]); // actualizar posición en el panel
+                panel1.repaint();
+
+                try {
+                   Thread.sleep(velocidad+ velocidadGlobal); // variable compartida
+
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+// Guardar tiempo de llegada
+            tiemposLlegada[i] = System.currentTimeMillis() - inicioCa;
+            llego[i] = true;
+
+            synchronized(this) {
                 carrosFin++;
-                switch(i) {
-        case 0: orden = "verde"; break;
-        case 1: orden = "azul"; break;
-        case 2: orden = "rojo"; break;
-        case 3: orden = "cafe"; break;
-        case 4: orden = "amarillo"; break;
-        case 5: orden = "celeste"; break;
-        case 6: orden = "morado"; break;
-        case 7: orden = "naranja"; break;
-        case 8: orden = "rosado"; break;
-        case 9: orden = "gris"; break;}
-                modelo.addRow(new Object[]{carrosFin, orden, tiemposLlegada[i]/1000}); // se ve en la tabla
                 if (carrosFin == 10) {
-                    ganador();
+                    mostrarResultados();
                 }
             }
         }
-    
-   
     }
-});
- 
- t[h].start();
 
-    
-}
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jButton1ActionPerformed
+
 
     private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
        
         
          
-        for (int h = 0; h < 10; h++) {
-///////////////
-
-    if(pos[h] >= 765){
-        
     for (int j = 0; j < 10; j++) {
    
      panel1.X(j,0); //metodo del panel
      panel1.repaint();
-    pos[h]=0;
+    pos[j]=0;
      llego[j] = false;
      
     }
-    
-    }
-            System.out.println(h);
+      panel1.repaint();
         modelo.removeRow(0);
-        }
+       
     ///////////////
     
     }//GEN-LAST:event_jButton2ActionPerformed
-public void ganador(){
-    int ganador = 0;
-    for (int i = 1; i < 10; i++) {
-        if (tiemposLlegada[i] < tiemposLlegada[ganador]) {
-            ganador = i;
+private void mostrarResultados() {
+        modelo.setRowCount(0); // limpiar tabla
+
+     
+        Integer[] indices = new Integer[10];
+        for (int i = 0; i < 10; i++) indices[i] = i;
+
+        // Ordenar por tiempo de llegada
+        Arrays.sort(indices, (a,b) -> Double.compare(tiemposLlegada[a], tiemposLlegada[b]));
+
+       
+        for (int puesto = 0; puesto < 10; puesto++) {
+            int i = indices[puesto];
+            modelo.addRow(new Object[]{puesto+1, colores[i], tiemposLlegada[i]/1000.0});
         }
+
+        //método ganador
+        /*+++++++++++++++++++++++++++++++++++++++++++*/
+        ganador();
     }
 
-    String apuesta = (String) jComboBox1.getSelectedItem();
-    String mensaje = "Ganó el carro " + modelo.getValueAt(0,1) + " en " + tiemposLlegada[ganador]/1000 + " segundos.\n";
- 
-if(apuesta==modelo.getValueAt(0,1)){
-    mensaje += "ganaste tu apuesta!";
 
+    public void ganador(){
+    int ganador = 0;
+        for (int i = 1; i < 10; i++) {
+            if (tiemposLlegada[i] < tiemposLlegada[ganador]) {
+                ganador = i;
+            }
+        }
 
-}else{
-   mensaje +=  "No ganaste esta vez";
-}
-javax.swing.JOptionPane.showMessageDialog(this, mensaje);
-   
+        String apuesta = (String) jComboBox1.getSelectedItem();
+        String mensaje = "Ganó el carro " + modelo.getValueAt(0,1) + " en " + tiemposLlegada[ganador]/1000 + " segundos.\n";
+
+        if(apuesta==modelo.getValueAt(0,1)){
+            mensaje += "ganaste tu apuesta!";
+        }else{
+            mensaje +=  "No ganaste esta vez";
+        }
+        javax.swing.JOptionPane.showMessageDialog(this, mensaje);
 
 }
     
     private void jSlider1StateChanged(javax.swing.event.ChangeEvent evt) {
-    int nuevoTiempo = jSlider1.getValue();
-
-    for (int i = 0; i < t.length; i++) {
-        if (t[i].isRunning()) {
-            t[i].setDelay(nuevoTiempo);
-        }
-    }
+    velocidadGlobal = jSlider1.getValue(); // actualizar la variable
 }
 
     
